@@ -1,5 +1,6 @@
-/**
- * Atari Pac-Man Clone - Estável com Auto-Start
+/** 
+ * ATARI PAC-MAN - VERSÃO ULTRA ESTÁVEL 1.3
+ * Correção: Movimentação livre para todos os fantasmas e Pac-man
  */
 
 const canvas = document.getElementById('gameCanvas');
@@ -15,10 +16,11 @@ const COLS = 19;
 canvas.width = COLS * TILE_SIZE;
 canvas.height = ROWS * TILE_SIZE;
 
+// 1: Parede, 2: Ponto, 0: Vazio
 const MAP = [
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
     [1,2,2,2,2,2,2,2,2,1,2,2,2,2,2,2,2,2,1],
-    [1,3,1,1,2,1,1,1,2,1,2,1,1,1,2,1,1,3,1],
+    [1,2,1,1,2,1,1,1,2,1,2,1,1,1,2,1,1,2,1],
     [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
     [1,2,1,1,2,1,2,1,1,1,1,1,2,1,2,1,1,2,1],
     [1,2,2,2,2,1,2,2,2,1,2,2,2,1,2,2,2,2,1],
@@ -31,7 +33,7 @@ const MAP = [
     [1,1,1,1,2,1,0,1,1,1,1,1,0,1,2,1,1,1,1],
     [1,2,2,2,2,2,2,2,2,1,2,2,2,2,2,2,2,2,1],
     [1,2,1,1,2,1,1,1,2,1,2,1,1,1,2,1,1,2,1],
-    [1,3,2,1,2,2,2,2,2,0,2,2,2,2,2,1,2,3,1],
+    [1,2,2,2,2,2,2,2,2,0,2,2,2,2,2,2,2,2,1],
     [1,1,2,1,2,1,2,1,1,1,1,1,2,1,2,1,2,1,1],
     [1,2,2,2,2,1,2,2,2,1,2,2,2,1,2,2,2,2,1],
     [1,2,1,1,1,1,1,1,2,1,2,1,1,1,1,1,1,2,1],
@@ -43,200 +45,126 @@ let workMap = [];
 let score = 0;
 let lives = 3;
 let gameState = 'START';
-let powerModeTimer = null;
 
 let pacman = {
-    x: 0, y: 0, dir: {x:0, y:0}, nextDir: {x:0, y:0}, speed: 2, radius: 8, mouth: 0, mouthOpen: 1
+    x: 0, y: 0, 
+    dir: {x:0, y:0}, 
+    nextDir: {x:0, y:0}, 
+    speed: 2, 
+    radius: 8
 };
 
-const ghostColors = ['#FF0000', '#FFB8FF', '#00FFFF', '#FFB852'];
 let ghosts = [];
 
-function canMove(x, y, dir, speed) {
-    const nextX = x + dir.x * speed;
-    const nextY = y + dir.y * speed;
-    const p = 8; // Padding strito para não entrar nas paredes
-    const corners = [
-        {x: nextX-p, y: nextY-p}, {x: nextX+p, y: nextY-p},
-        {x: nextX-p, y: nextY+p}, {x: nextX+p, y: nextY+p}
-    ];
-    for (let c of corners) {
-        let col = Math.floor(c.x / TILE_SIZE);
-        let row = Math.floor(c.y / TILE_SIZE);
-        if (workMap[row] && workMap[row][col] === 1) return false;
-    }
-    return true;
+function isWall(x, y) {
+    const col = Math.floor(x / TILE_SIZE);
+    const row = Math.floor(y / TILE_SIZE);
+    return !workMap[row] || workMap[row][col] === 1;
+}
+
+function canMove(x, y, dx, dy) {
+    // Margem de colisão reduzida para 4 para dar fluidez
+    const m = 4; 
+    const nx = x + dx * 2;
+    const ny = y + dy * 2;
+    return !isWall(nx-m, ny-m) && !isWall(nx+m, ny-m) && !isWall(nx-m, ny+m) && !isWall(nx+m, ny+m);
 }
 
 function initEntities() {
-    pacman.x = 9 * TILE_SIZE + TILE_SIZE/2;
-    pacman.y = 15 * TILE_SIZE + TILE_SIZE/2;
+    workMap = MAP.map(row => [...row]);
+    pacman.x = 9 * TILE_SIZE + 10;
+    pacman.y = 15 * TILE_SIZE + 10;
     pacman.dir = {x:0, y:0};
     pacman.nextDir = {x:0, y:0};
     
-    const cx = 9 * TILE_SIZE + TILE_SIZE/2;
-    const cy = 9 * TILE_SIZE + TILE_SIZE/2;
-    ghosts = ghostColors.map((color, i) => ({
-        x: cx + (i-1.5)*TILE_SIZE, y: cy, color: color, 
-        dir: {x: 0, y: -1}, speed: 2, state: 'normal'
-    }));
+    ghosts = [
+        {x: 9 * TILE_SIZE + 10, y: 7 * TILE_SIZE + 10, color: 'red', dir: {x:1, y:0}},
+        {x: 9 * TILE_SIZE + 10, y: 9 * TILE_SIZE + 10, color: 'pink', dir: {x:-1, y:0}},
+        {x: 7 * TILE_SIZE + 10, y: 9 * TILE_SIZE + 10, color: 'cyan', dir: {x:0, y:1}},
+        {x: 11 * TILE_SIZE + 10, y: 9 * TILE_SIZE + 10, color: 'orange', dir: {x:0, y:-1}}
+    ];
 }
 
-function resetGame() {
-    workMap = MAP.map(row => [...row]);
-    score = 0;
-    lives = 3;
-    if (scoreElement) scoreElement.innerText = "000000";
-    if (livesElement) livesElement.innerText = "3";
-    initEntities();
-    if (overlay) overlay.classList.add('hidden');
-}
-
-window.addEventListener('keydown', (e) => {
-    // START TRIGGER
-    if (gameState !== 'PLAYING' && gameState !== 'FRIGHTENED') {
-        const triggers = ['Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
-        if (triggers.includes(e.key)) {
-            resetGame();
-            gameState = 'PLAYING';
-        }
+window.addEventListener('keydown', e => {
+    if (gameState === 'START') { 
+        gameState = 'PLAYING'; 
+        if (overlay) overlay.classList.add('hidden'); 
     }
-    
-    // INPUT DURING GAME
-    if (gameState === 'PLAYING' || gameState === 'FRIGHTENED') {
-        const keys = {ArrowUp:{x:0,y:-1}, ArrowDown:{x:0,y:1}, ArrowLeft:{x:-1,y:0}, ArrowRight:{x:1,y:0}};
-        if (keys[e.key]) pacman.nextDir = keys[e.key];
-    }
+    const keys = {ArrowUp:{x:0,y:-1}, ArrowDown:{x:0,y:1}, ArrowLeft:{x:-1,y:0}, ArrowRight:{x:1,y:0}};
+    if (keys[e.key]) pacman.nextDir = keys[e.key];
 });
 
-function update() {
-    // Pac-Man Logic
-    if (pacman.nextDir.x !== 0 || pacman.nextDir.y !== 0) {
-        const cx = Math.floor(pacman.x / TILE_SIZE) * TILE_SIZE + TILE_SIZE/2;
-        const cy = Math.floor(pacman.y / TILE_SIZE) * TILE_SIZE + TILE_SIZE/2;
-        // Permite virar se estiver próximo ao centro do tile
-        if (Math.abs(pacman.x - cx) < 6 && Math.abs(pacman.y - cy) < 6) {
-           if (canMove(cx, cy, pacman.nextDir, pacman.speed)) {
-               pacman.x = cx; pacman.y = cy;
-               pacman.dir = {...pacman.nextDir};
-           }
+function loop() {
+    if (gameState === 'PLAYING') {
+        // Lógica Pac-Man
+        if (pacman.nextDir.x !== 0 || pacman.nextDir.y !== 0) {
+             const cx = Math.floor(pacman.x/TILE_SIZE)*TILE_SIZE+10;
+             const cy = Math.floor(pacman.y/TILE_SIZE)*TILE_SIZE+10;
+             if (Math.abs(pacman.x-cx)<6 && Math.abs(pacman.y-cy)<6) {
+                 if (canMove(cx, cy, pacman.nextDir.x, pacman.nextDir.y)) {
+                     pacman.x = cx; pacman.y = cy;
+                     pacman.dir = {...pacman.nextDir};
+                 }
+             }
         }
-    }
-    
-    if (canMove(pacman.x, pacman.y, pacman.dir, pacman.speed)) {
-        pacman.x += pacman.dir.x * pacman.speed;
-        pacman.y += pacman.dir.y * pacman.speed;
-    }
-
-    // Wrap around
-    if (pacman.x < 0) pacman.x = canvas.width;
-    if (pacman.x > canvas.width) pacman.x = 0;
-
-    // Collect Dots
-    const c = Math.floor(pacman.x / TILE_SIZE), r = Math.floor(pacman.y / TILE_SIZE);
-    if (workMap[r] && workMap[r][c] > 1) {
-        if (workMap[r][c] === 3) {
-            gameState = 'FRIGHTENED';
-            ghosts.forEach(g => g.state = 'frightened');
-            clearTimeout(powerModeTimer);
-            powerModeTimer = setTimeout(() => { 
-                if (gameState === 'FRIGHTENED') gameState = 'PLAYING'; 
-                ghosts.forEach(g => g.state = 'normal'); 
-            }, 7000);
+        
+        if (canMove(pacman.x, pacman.y, pacman.dir.x, pacman.dir.y)) {
+            pacman.x += pacman.dir.x * 2;
+            pacman.y += pacman.dir.y * 2;
         }
-        score += workMap[r][c] === 2 ? 10 : 50;
-        workMap[r][c] = 0;
-        if (scoreElement) scoreElement.innerText = score.toString().padStart(6, '0');
-    }
 
-    // Ghost Logic
-    ghosts.forEach(g => {
-        const s = g.state === 'frightened' ? 1 : g.speed;
-        const cx = Math.floor(g.x / TILE_SIZE) * TILE_SIZE + TILE_SIZE/2;
-        const cy = Math.floor(g.y / TILE_SIZE) * TILE_SIZE + TILE_SIZE/2;
-        
-        const atCenter = Math.abs(g.x - cx) < 3 && Math.abs(g.y - cy) < 3;
-        
-        if (!canMove(g.x, g.y, g.dir, s) || atCenter) {
-            const dirs = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}].filter(d => 
-                (d.x !== -g.dir.x || d.y !== -g.dir.y) && canMove(g.x, g.y, d, s)
-            );
-            if (dirs.length > 0 && (Math.random() < 0.3 || !canMove(g.x, g.y, g.dir, s))) {
-                g.dir = dirs[Math.floor(Math.random() * dirs.length)];
+        // Lógica Pontos
+        const c = Math.floor(pacman.x / TILE_SIZE), r = Math.floor(pacman.y / TILE_SIZE);
+        if (workMap[r] && workMap[r][c] === 2) {
+            workMap[r][c] = 0;
+            score += 10;
+            if (scoreElement) scoreElement.innerText = score.toString().padStart(6, '0');
+        }
+
+        // Lógica Fantasmas
+        ghosts.forEach(g => {
+            // Se bater ou aleatoriamente, muda direção
+            if (!canMove(g.x, g.y, g.dir.x, g.dir.y) || Math.random() < 0.05) {
+                const d = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}].filter(dir => canMove(g.x, g.y, dir.x, dir.y));
+                if (d.length > 0) g.dir = d[Math.floor(Math.random()*d.length)];
             }
-        }
-        
-        if (canMove(g.x, g.y, g.dir, s)) {
-            g.x += g.dir.x * s;
-            g.y += g.dir.y * s;
-        }
-
-        // Ghost collision
-        if (Math.hypot(pacman.x - g.x, pacman.y - g.y) < 16) {
-            if (g.state === 'frightened') {
-                score += 200; g.x = 9*TILE_SIZE+10; g.y = 9*TILE_SIZE+10; g.state = 'normal';
-            } else {
-                lives--; if (livesElement) livesElement.innerText = lives;
-                if (lives <= 0) { 
-                    gameState = 'GAMEOVER'; 
-                    if (overlay) overlay.classList.remove('hidden'); 
-                    if (messageElement) messageElement.innerText = "GAME OVER"; 
+            g.x += g.dir.x * 2;
+            g.y += g.dir.y * 2;
+            
+            // Colisão fantasma
+            if (Math.hypot(pacman.x - g.x, pacman.y - g.y) < 15) {
+                lives--;
+                if (livesElement) livesElement.innerText = lives;
+                if (lives <= 0) {
+                    gameState = 'GAMEOVER';
+                    if (overlay) overlay.classList.remove('hidden');
+                    if (messageElement) messageElement.innerText = "GAME OVER";
                 } else initEntities();
             }
-        }
-    });
-
-    // Win condition
-    if (workMap.flat().filter(t => t > 1).length === 0) {
-        gameState = 'WON'; 
-        if (overlay) overlay.classList.remove('hidden'); 
-        if (messageElement) messageElement.innerText = "YOU WIN!";
+        });
     }
-}
 
-function draw() {
-    ctx.fillStyle = 'black'; 
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    for (let r=0; r<ROWS; r++) {
-        for (let c=0; c<COLS; c++) {
-            if (MAP[r][c] === 1) { 
-                ctx.fillStyle = 'blue'; 
-                ctx.fillRect(c*20+1, r*20+1, 18, 18); 
-            }
-            if (workMap[r][c] === 2) { 
-                ctx.fillStyle = 'white'; 
-                ctx.fillRect(c*20+8, r*20+8, 4, 4); 
-            }
-            if (workMap[r][c] === 3) { 
-                ctx.fillStyle = 'white'; 
-                ctx.beginPath(); 
-                ctx.arc(c*20+10, r*20+10, 6, 0, 6.28); 
-                ctx.fill(); 
-            }
+    // Desenho
+    ctx.fillStyle = 'black'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    for(let r=0; r<ROWS; r++) {
+        for(let c=0; c<COLS; c++) {
+            if (MAP[r][c] === 1) { ctx.fillStyle = 'blue'; ctx.fillRect(c*20+1, r*20+1, 18, 18); }
+            if (workMap[r][c] === 2) { ctx.fillStyle = 'white'; ctx.fillRect(c*20+9, r*20+9, 2, 2); }
         }
     }
     
-    // Pacman Draw
-    ctx.fillStyle = 'yellow'; 
-    ctx.beginPath(); 
-    ctx.arc(pacman.x, pacman.y, pacman.radius, 0.2, 6.08); 
-    ctx.lineTo(pacman.x, pacman.y);
-    ctx.fill();
+    // Desenhar Pacman
+    ctx.fillStyle = 'yellow';
+    ctx.beginPath(); ctx.arc(pacman.x, pacman.y, 8, 0, 6.28); ctx.fill();
     
-    // Ghosts Draw
+    // Desenhar Fantasmas
     ghosts.forEach(g => {
-        ctx.fillStyle = g.state === 'frightened' ? 'blue' : g.color;
+        ctx.fillStyle = g.color;
         ctx.fillRect(g.x-8, g.y-8, 16, 16);
     });
-}
-
-function loop() {
-    if (gameState === 'PLAYING' || gameState === 'FRIGHTENED') update();
-    draw();
+    
     requestAnimationFrame(loop);
 }
 
-workMap = MAP.map(row => [...row]);
 initEntities();
 loop();
