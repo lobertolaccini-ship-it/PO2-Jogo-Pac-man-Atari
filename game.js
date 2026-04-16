@@ -1,6 +1,6 @@
 /**
- * ATARI PAC-MAN - VERSÃO 1.5 FINAL
- * Foco: Movimentação Fluida + Sistema de Vidas e Reinício
+ * Atari Pac-Man Clone - Versão Restaurada 1.3
+ * Labirinto detalhado e movimentação estável.
  */
 
 const canvas = document.getElementById('gameCanvas');
@@ -18,21 +18,21 @@ canvas.height = ROWS * TILE_SIZE;
 
 const MAP = [
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-    [1,2,2,2,2,2,2,2,2,0,2,2,2,2,2,2,2,2,1],
+    [1,2,2,2,2,2,2,2,2,1,2,2,2,2,2,2,2,2,1],
     [1,2,1,1,2,1,1,1,2,1,2,1,1,1,2,1,1,2,1],
-    [1,2,2,2,2,0,0,0,0,0,0,0,0,0,2,2,2,2,1],
-    [1,2,1,1,2,1,0,1,1,1,1,1,0,1,2,1,1,2,1],
-    [1,2,2,2,2,1,0,0,0,0,0,0,0,1,2,2,2,2,1],
-    [1,1,1,1,2,1,0,1,1,0,1,1,0,1,2,1,1,1,1],
+    [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+    [1,2,1,1,2,1,2,1,1,1,1,1,2,1,2,1,1,2,1],
+    [1,2,2,2,2,1,2,2,2,1,2,2,2,1,2,2,2,2,1],
+    [1,1,1,1,2,1,1,1,0,1,0,1,1,1,2,1,1,1,1],
     [0,0,0,1,2,1,0,0,0,0,0,0,0,1,2,1,0,0,0],
-    [1,1,1,1,2,1,1,1,0,0,0,1,1,1,2,1,1,1,1],
-    [0,0,0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,0],
-    [1,1,1,1,2,1,1,1,0,0,0,1,1,1,2,1,1,1,1],
+    [1,1,1,1,2,1,0,1,1,0,1,1,0,1,2,1,1,1,1],
+    [0,0,0,0,2,0,0,1,0,0,0,1,0,0,2,0,0,0,0],
+    [1,1,1,1,2,1,0,1,1,1,1,1,0,1,2,1,1,1,1],
     [0,0,0,1,2,1,0,0,0,0,0,0,0,1,2,1,0,0,0],
     [1,1,1,1,2,1,0,1,1,1,1,1,0,1,2,1,1,1,1],
-    [1,2,2,2,2,0,0,0,0,1,0,0,0,0,2,2,2,2,1],
+    [1,2,2,2,2,2,2,2,2,1,2,2,2,2,2,2,2,2,1],
     [1,2,1,1,2,1,1,1,2,1,2,1,1,1,2,1,1,2,1],
-    [1,2,2,2,0,0,0,0,0,0,0,0,0,0,0,2,2,2,1], 
+    [1,2,2,2,2,2,2,2,2,0,2,2,2,2,2,2,2,2,1],
     [1,1,2,1,2,1,2,1,1,1,1,1,2,1,2,1,2,1,1],
     [1,2,2,2,2,1,2,2,2,1,2,2,2,1,2,2,2,2,1],
     [1,2,1,1,1,1,1,1,2,1,2,1,1,1,1,1,1,2,1],
@@ -44,7 +44,15 @@ let workMap = [];
 let score = 0;
 let lives = 3;
 let gameState = 'START';
-let pacman = { x: 190, y: 310, dir: {x:0, y:0}, speed:3 };
+
+let pacman = {
+    x: 0, y: 0, 
+    dir: {x:0, y:0}, 
+    nextDir: {x:0, y:0}, 
+    speed: 2, 
+    radius: 8
+};
+
 let ghosts = [];
 
 function isWall(x, y) {
@@ -53,56 +61,52 @@ function isWall(x, y) {
     return !workMap[row] || workMap[row][col] === 1;
 }
 
-function canMove(x, y, dx, dy, speed = 2) {
-    const nx = x + dx * speed;
-    const ny = y + dy * speed;
-    const m = 6; 
+function canMove(x, y, dx, dy) {
+    const m = 5; 
+    const nx = x + dx * 2;
+    const ny = y + dy * 2;
     return !isWall(nx-m, ny-m) && !isWall(nx+m, ny-m) && !isWall(nx-m, ny+m) && !isWall(nx+m, ny+m);
 }
 
-function init(resetMap = false) {
-    if (resetMap) {
-        workMap = MAP.map(row => [...row]);
-        score = 0;
-        lives = 3;
-        if(scoreElement) scoreElement.innerText = "000000";
-        if(livesElement) livesElement.innerText = "3";
-    }
-    pacman.x = 190; pacman.y = 310; pacman.dir = {x:0,y:0};
+function initEntities() {
+    workMap = MAP.map(row => [...row]);
+    pacman.x = 9 * TILE_SIZE + 10;
+    pacman.y = 15 * TILE_SIZE + 10;
+    pacman.dir = {x:0, y:0};
+    pacman.nextDir = {x:0, y:0};
+    
     ghosts = [
-        {x: 60, y: 60, color: '#FF0000', dir: {x:1, y:0}},
-        {x: 320, y: 60, color: '#FFB8FF', dir: {x:-1, y:0}},
-        {x: 60, y: 360, color: '#00FFFF', dir: {x:0, y:-1}},
-        {x: 320, y: 360, color: '#FFB852', dir: {x:0, y:1}}
+        {x: 190, y: 150, color: '#FF0000', dir: {x:1, y:0}},
+        {x: 190, y: 190, color: '#FFB8FF', dir: {x:-1, y:0}},
+        {x: 150, y: 190, color: '#00FFFF', dir: {x:0, y:1}},
+        {x: 230, y: 190, color: '#FFB852', dir: {x:0, y:-1}}
     ];
 }
 
 window.addEventListener('keydown', e => {
-    if (gameState === 'START' || gameState === 'GAMEOVER') {
-        const triggers = ['Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
-        if (triggers.includes(e.key)) {
-            init(true);
-            gameState = 'PLAYING';
-            if (overlay) overlay.classList.add('hidden');
-        }
-        return;
+    if (gameState === 'START') { 
+        gameState = 'PLAYING'; 
+        if (overlay) overlay.classList.add('hidden'); 
     }
-    
-    if (e.key === 'ArrowUp')    pacman.dir = {x:0, y:-1};
-    if (e.key === 'ArrowDown')  pacman.dir = {x:0, y:1};
-    if (e.key === 'ArrowLeft')  pacman.dir = {x:-1, y:0};
-    if (e.key === 'ArrowRight') pacman.dir = {x:1, y:0};
+    const keys = {ArrowUp:{x:0,y:-1}, ArrowDown:{x:0,y:1}, ArrowLeft:{x:-1,y:0}, ArrowRight:{x:1,y:0}};
+    if (keys[e.key]) {
+        // Imediatamente muda se possível
+        if (canMove(pacman.x, pacman.y, keys[e.key].x, keys[e.key].y)) {
+             pacman.dir = keys[e.key];
+        }
+        pacman.nextDir = keys[e.key];
+    }
 });
 
 function update() {
-    // Pacman Move
-    if (canMove(pacman.x, pacman.y, pacman.dir.x, pacman.dir.y, pacman.speed)) {
-        pacman.x += pacman.dir.x * pacman.speed;
-        pacman.y += pacman.dir.y * pacman.speed;
+    // Pacman
+    if (canMove(pacman.x, pacman.y, pacman.dir.x, pacman.dir.y)) {
+        pacman.x += pacman.dir.x * 2;
+        pacman.y += pacman.dir.y * 2;
     }
 
-    // Points
-    const c = Math.floor(pacman.x/20), r = Math.floor(pacman.y/20);
+    // Dots
+    const c = Math.floor(pacman.x / TILE_SIZE), r = Math.floor(pacman.y / TILE_SIZE);
     if (workMap[r] && workMap[r][c] === 2) {
         workMap[r][c] = 0;
         score += 10;
@@ -111,32 +115,28 @@ function update() {
 
     // Ghosts
     ghosts.forEach(g => {
-        if (!canMove(g.x, g.y, g.dir.x, g.dir.y, 2) || Math.random() < 0.05) {
-            const d = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}].filter(dir => canMove(g.x, g.y, dir.x, dir.y, 2));
+        if (!canMove(g.x, g.y, g.dir.x, g.dir.y) || Math.random() < 0.05) {
+            const d = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}].filter(dir => canMove(g.x, g.y, dir.x, dir.y));
             if (d.length > 0) g.dir = d[Math.floor(Math.random()*d.length)];
         }
-        g.x += g.dir.x * 2; g.y += g.dir.y * 2;
+        g.x += g.dir.x * 2;
+        g.y += g.dir.y * 2;
 
-        // Life Detection
-        if (Math.hypot(pacman.x - g.x, pacman.y - g.y) < 16) {
+        if (Math.hypot(pacman.x - g.x, pacman.y - g.y) < 15) {
             lives--;
             if (livesElement) livesElement.innerText = lives;
             if (lives <= 0) {
-                gameState = 'GAMEOVER';
+                gameState = 'START';
                 if (overlay) overlay.classList.remove('hidden');
                 if (messageElement) messageElement.innerText = "GAME OVER";
+                initEntities();
             } else {
-                init(false); // Reset positions but keep dots/score
+                pacman.x = 9 * 20 + 10;
+                pacman.y = 15 * 20 + 10;
+                pacman.dir = {x:0, y:0};
             }
         }
     });
-
-    // Win Check
-    if (workMap.flat().filter(t => t === 2).length === 0) {
-        gameState = 'GAMEOVER';
-        if (overlay) overlay.classList.remove('hidden');
-        if (messageElement) messageElement.innerText = "YOU WIN!";
-    }
 }
 
 function draw() {
@@ -144,14 +144,10 @@ function draw() {
     for(let r=0; r<ROWS; r++) {
         for(let c=0; c<COLS; c++) {
             if (MAP[r][c] === 1) { ctx.fillStyle = '#0000FF'; ctx.fillRect(c*20+1, r*20+1, 18, 18); }
-            if (workMap[r][c] === 2) { ctx.fillStyle = '#FFB8AE'; ctx.fillRect(c*tileX=c*20+9, tileY=r*20+9, 3, 3); }
+            if (workMap[r][c] === 2) { ctx.fillStyle = '#FFB8AE'; ctx.fillRect(c*20+9, r*20+9, 2, 2); }
         }
     }
-    // Fixed dot drawing loop
-    ctx.fillStyle = '#FFB8AE';
-    for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++) if(workMap[r][c] === 2) ctx.fillRect(c*20+9, r*20+9, 3, 3);
-
-    ctx.fillStyle = 'yellow'; ctx.beginPath(); ctx.arc(pacman.x, pacman.y, 9, 0, 6.28); ctx.fill();
+    ctx.fillStyle = 'yellow'; ctx.beginPath(); ctx.arc(pacman.x, pacman.y, 8, 0, 6.28); ctx.fill();
     ghosts.forEach(g => { ctx.fillStyle = g.color; ctx.fillRect(g.x-8, g.y-8, 16, 16); });
 }
 
@@ -161,5 +157,5 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
-init(true);
+initEntities();
 loop();
