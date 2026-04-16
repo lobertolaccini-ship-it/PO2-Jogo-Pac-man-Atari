@@ -1,6 +1,7 @@
 /**
  * Atari Pac-Man Clone
  * Lógica principal do jogo usando Canvas API
+ * Atualizado: IA de Fantasmas, Colisões e Sistema de Respawn
  */
 
 const canvas = document.getElementById('gameCanvas');
@@ -50,8 +51,8 @@ let powerModeTimer = null;
 
 // Entidades
 let pacman = {
-    x: 9 * TILE_SIZE,
-    y: 15 * TILE_SIZE,
+    x: 9 * TILE_SIZE + TILE_SIZE/2,
+    y: 15 * TILE_SIZE + TILE_SIZE/2,
     dir: { x: 0, y: 0 },
     nextDir: { x: 0, y: 0 },
     speed: 2,
@@ -64,11 +65,14 @@ const ghostColors = ['#FF0000', '#FFB8FF', '#00FFFF', '#FFB852'];
 let ghosts = [];
 
 function initGhosts() {
+    const centerX = 9 * TILE_SIZE + TILE_SIZE/2;
+    const centerY = 9 * TILE_SIZE + TILE_SIZE/2;
+    
     ghosts = [
-        { x: 9 * TILE_SIZE, y: 9 * TILE_SIZE, color: ghostColors[0], dir: { x: 1, y: 0 }, speed: 2, state: 'normal' },
-        { x: 8 * TILE_SIZE, y: 9 * TILE_SIZE, color: ghostColors[1], dir: { x: -1, y: 0 }, speed: 2, state: 'normal' },
-        { x: 10 * TILE_SIZE, y: 9 * TILE_SIZE, color: ghostColors[2], dir: { x: 0, y: -1 }, speed: 2, state: 'normal' },
-        { x: 9 * TILE_SIZE, y: 8 * TILE_SIZE, color: ghostColors[3], dir: { x: 0, y: 1 }, speed: 2, state: 'normal' }
+        { x: centerX, y: centerY, color: ghostColors[0], dir: { x: 1, y: 0 }, speed: 2, state: 'normal' },
+        { x: centerX - TILE_SIZE, y: centerY, color: ghostColors[1], dir: { x: -1, y: 0 }, speed: 2, state: 'normal' },
+        { x: centerX + TILE_SIZE, y: centerY, color: ghostColors[2], dir: { x: 0, y: -1 }, speed: 2, state: 'normal' },
+        { x: centerX, y: centerY - TILE_SIZE, color: ghostColors[3], dir: { x: 0, y: 1 }, speed: 2, state: 'normal' }
     ];
 }
 
@@ -76,8 +80,8 @@ function resetGame() {
     workMap = MAP.map(row => [...row]);
     score = 0;
     lives = 3;
-    scoreElement.innerText = "000000";
-    livesElement.innerText = "3";
+    if(scoreElement) scoreElement.innerText = "000000";
+    if(livesElement) livesElement.innerText = "3";
     resetPositions();
     gameState = 'START';
     overlay.classList.remove('hidden');
@@ -85,8 +89,8 @@ function resetGame() {
 }
 
 function resetPositions() {
-    pacman.x = 9 * TILE_SIZE;
-    pacman.y = 15 * TILE_SIZE;
+    pacman.x = 9 * TILE_SIZE + TILE_SIZE/2;
+    pacman.y = 15 * TILE_SIZE + TILE_SIZE/2;
     pacman.dir = { x: 0, y: 0 };
     pacman.nextDir = { x: 0, y: 0 };
     initGhosts();
@@ -111,16 +115,16 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
-function canMove(x, y, dir) {
-    const nextX = x + dir.x * pacman.speed;
-    const nextY = y + dir.y * pacman.speed;
-    
-    // Check corners for wall collision
+function canMove(x, y, dir, speed = 2) {
+    const nextX = x + dir.x * speed;
+    const nextY = y + dir.y * speed;
+    const padding = 7;
+
     const corners = [
-        { x: nextX - 7, y: nextY - 7 },
-        { x: nextX + 7, y: nextY - 7 },
-        { x: nextX - 7, y: nextY + 7 },
-        { x: nextX + 7, y: nextY + 7 }
+        { x: nextX - padding, y: nextY - padding },
+        { x: nextX + padding, y: nextY - padding },
+        { x: nextX - padding, y: nextY + padding },
+        { x: nextX + padding, y: nextY + padding }
     ];
 
     for (let c of corners) {
@@ -132,9 +136,7 @@ function canMove(x, y, dir) {
 }
 
 function updatePacman() {
-    // Try to change to nextDir if possible
     if (pacman.nextDir.x !== 0 || pacman.nextDir.y !== 0) {
-        // Alinhamento no grid para facilitar curvas
         const centerX = Math.floor(pacman.x / TILE_SIZE) * TILE_SIZE + TILE_SIZE/2;
         const centerY = Math.floor(pacman.y / TILE_SIZE) * TILE_SIZE + TILE_SIZE/2;
         
@@ -152,28 +154,25 @@ function updatePacman() {
         pacman.y += pacman.dir.y * pacman.speed;
     }
 
-    // Teletransporte lateral
     if (pacman.x < 0) pacman.x = canvas.width;
     if (pacman.x > canvas.width) pacman.x = 0;
 
-    // Comer pontos
     const col = Math.floor(pacman.x / TILE_SIZE);
     const row = Math.floor(pacman.y / TILE_SIZE);
     
-    if (workMap[row][col] === 2) {
+    if (workMap[row] && workMap[row][col] === 2) {
         workMap[row][col] = 0;
         score += 10;
         checkWin();
-    } else if (workMap[row][col] === 3) {
+    } else if (workMap[row] && workMap[row][col] === 3) {
         workMap[row][col] = 0;
         score += 50;
         activatePowerMode();
         checkWin();
     }
     
-    scoreElement.innerText = score.toString().padStart(6, '0');
+    if(scoreElement) scoreElement.innerText = score.toString().padStart(6, '0');
     
-    // Animação boca
     pacman.mouth += 0.1 * pacman.mouthOpen;
     if (pacman.mouth > 0.2 || pacman.mouth < 0) pacman.mouthOpen *= -1;
 }
@@ -183,7 +182,7 @@ function activatePowerMode() {
     ghosts.forEach(g => g.state = 'frightened');
     if (powerModeTimer) clearTimeout(powerModeTimer);
     powerModeTimer = setTimeout(() => {
-        gameState = 'PLAYING';
+        if (gameState === 'FRIGHTENED') gameState = 'PLAYING';
         ghosts.forEach(g => g.state = 'normal');
     }, 7000);
 }
@@ -199,43 +198,46 @@ function checkWin() {
 
 function updateGhosts() {
     ghosts.forEach(g => {
-        // IA simples: segue reto até bater numa parede ou encontrar interseção
         const col = Math.floor(g.x / TILE_SIZE);
         const row = Math.floor(g.y / TILE_SIZE);
         
-        const possibleDirs = [
-            { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }
-        ].filter(d => {
-            // Não volta para trás a menos que não tenha opção
-            if (d.x === -g.dir.x && d.y === -g.dir.y) return false;
-            const nextR = row + d.y;
-            const nextC = col + d.x;
-            return workMap[nextR] && workMap[nextR][nextC] !== 1;
-        });
+        const centerX = col * TILE_SIZE + TILE_SIZE/2;
+        const centerY = row * TILE_SIZE + TILE_SIZE/2;
 
-        const atIntersection = (g.x % TILE_SIZE === TILE_SIZE/2 && g.y % TILE_SIZE === TILE_SIZE/2);
-        
-        if (atIntersection && (possibleDirs.length > 0)) {
-            // Decide mudar de direção aleatoriamente em interseções
-            if (Math.random() < 0.3 || workMap[row + g.dir.y] && workMap[row + g.dir.y][col + g.dir.x] === 1) {
-                g.dir = possibleDirs[Math.floor(Math.random() * possibleDirs.length)];
+        const atCenter = Math.abs(g.x - centerX) < 2 && Math.abs(g.y - centerY) < 2;
+
+        if (atCenter) {
+            const possibleDirs = [
+                { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }
+            ].filter(d => {
+                if (d.x === -g.dir.x && d.y === -g.dir.y) return false;
+                return canMove(g.x, g.y, d, 2);
+            });
+
+            if (!canMove(g.x, g.y, g.dir, 2) || (possibleDirs.length > 1 && Math.random() < 0.3)) {
+                if (possibleDirs.length > 0) {
+                    g.dir = possibleDirs[Math.floor(Math.random() * possibleDirs.length)];
+                } else {
+                    g.dir = { x: -g.dir.x, y: -g.dir.y };
+                }
             }
         }
 
-        g.x += g.dir.x * (g.state === 'frightened' ? 1 : g.speed);
-        g.y += g.dir.y * (g.state === 'frightened' ? 1 : g.speed);
+        const speed = g.state === 'frightened' ? 1 : g.speed;
+        if (canMove(g.x, g.y, g.dir, speed)) {
+            g.x += g.dir.x * speed;
+            g.y += g.dir.y * speed;
+        }
 
-        // Teletransporte lateral
         if (g.x < 0) g.x = canvas.width;
         if (g.x > canvas.width) g.x = 0;
 
-        // Colisão com Pac-Man
         const dist = Math.hypot(pacman.x - g.x, pacman.y - g.y);
         if (dist < 15) {
             if (g.state === 'frightened') {
                 score += 200;
-                g.x = 9 * TILE_SIZE;
-                g.y = 9 * TILE_SIZE;
+                g.x = 9 * TILE_SIZE + TILE_SIZE/2;
+                g.y = 9 * TILE_SIZE + TILE_SIZE/2;
                 g.state = 'normal';
             } else {
                 handleDeath();
@@ -246,7 +248,7 @@ function updateGhosts() {
 
 function handleDeath() {
     lives--;
-    livesElement.innerText = lives;
+    if(livesElement) livesElement.innerText = lives;
     if (lives <= 0) {
         gameState = 'GAMEOVER';
         overlay.classList.remove('hidden');
@@ -256,23 +258,21 @@ function handleDeath() {
     }
 }
 
-// Rendering Functions
 function draw() {
     ctx.fillStyle = 'black';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Draw Map
     for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
             const tile = workMap[r][c];
             if (tile === 1) {
-                ctx.fillStyle = '#0000FF'; // Blue walls
+                ctx.fillStyle = '#0000FF';
                 ctx.fillRect(c * TILE_SIZE + 2, r * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4);
             } else if (tile === 2) {
-                ctx.fillStyle = '#FFB8AE'; // Pellets
+                ctx.fillStyle = '#FFB8AE';
                 ctx.fillRect(c * TILE_SIZE + 8, r * TILE_SIZE + 8, 4, 4);
             } else if (tile === 3) {
-                ctx.fillStyle = '#FFB8AE'; // Power pellets
+                ctx.fillStyle = '#FFB8AE';
                 ctx.beginPath();
                 ctx.arc(c * TILE_SIZE + 10, r * TILE_SIZE + 10, 6, 0, Math.PI * 2);
                 ctx.fill();
@@ -280,7 +280,6 @@ function draw() {
         }
     }
 
-    // Draw Pac-Man
     ctx.fillStyle = '#FFFF00';
     ctx.beginPath();
     let rotation = 0;
@@ -293,22 +292,18 @@ function draw() {
     ctx.arc(pacman.x, pacman.y, pacman.radius, rotation + pacman.mouth, rotation + 2 * Math.PI - pacman.mouth);
     ctx.fill();
 
-    // Draw Ghosts
     ghosts.forEach(g => {
         ctx.fillStyle = g.state === 'frightened' ? '#2121ff' : g.color;
         
-        // Forma de fantasma simplificada Atari
         ctx.fillRect(g.x - 8, g.y - 8, 16, 12);
         ctx.beginPath();
         ctx.arc(g.x, g.y - 4, 8, Math.PI, 0);
         ctx.fill();
         
-        // "Pezinhos"
         ctx.fillRect(g.x - 8, g.y + 4, 4, 4);
         ctx.fillRect(g.x - 2, g.y + 4, 4, 4);
         ctx.fillRect(g.x + 4, g.y + 4, 4, 4);
         
-        // Olhos
         ctx.fillStyle = 'white';
         ctx.fillRect(g.x - 5, g.y - 4, 4, 4);
         ctx.fillRect(g.x + 1, g.y - 4, 4, 4);
@@ -324,8 +319,7 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-// Start
 workMap = MAP.map(row => [...row]);
 initGhosts();
 gameLoop();
-window.game = { resetGame }; // For manual reset if needed
+window.game = { resetGame };
