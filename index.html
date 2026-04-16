@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atari Pac-Man Clone</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Importando uma fonte retro do Google Fonts para o look Atari -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="game-container">
+        <div id="ui-layer">
+            <div class="stat">SCORE: <span id="score">000000</span></div>
+            <div class="stat">LIVES: <span id="lives">3</span></div>
+        </div>
+        
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="overlay" class="hidden">
+            <h1 id="message">GAME OVER</h1>
+            <p>PRESS ENTER TO RESTART</p>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
